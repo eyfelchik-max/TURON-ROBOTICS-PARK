@@ -26,17 +26,27 @@ async function startServer() {
       return res.status(500).json({ error: "Notification service not configured" });
     }
 
-    const message = `
-🌐 <b>Web saytdan yuborildi</b>
-🆕 Yangi ro'yxatdan o'tish!
+    const escapeHTML = (str: string = "") => {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    };
 
-👤 Ism: ${data.firstName}
-👥 Familiya: ${data.lastName}
-📞 Tel: ${data.phone}
-📨 Telegram: @${data.telegram}
-📍 Hudud: ${data.region}, ${data.district}
-🏠 Mahalla: ${data.neighborhood}
-🎂 Yosh: ${data.age}
+    const message = `
+🌐 <b>Yangi ariza kelib tushdi!</b>
+
+👤 <b>Ism:</b> ${escapeHTML(data.firstName)}
+👥 <b>Familiya:</b> ${escapeHTML(data.lastName)}
+📞 <b>Tel:</b> ${escapeHTML(data.phone)}
+📨 <b>Telegram:</b> @${escapeHTML(data.telegram)}
+📍 <b>Hudud:</b> ${escapeHTML(data.region)}, ${escapeHTML(data.district)}
+🏠 <b>Mahalla:</b> ${escapeHTML(data.neighborhood)}
+🎂 <b>Yosh:</b> ${escapeHTML(data.age)}
+
+#yangi_ariza #turon_robotics_park
     `.trim();
 
     try {
@@ -50,15 +60,20 @@ async function startServer() {
         }),
       });
 
+      const result = await response.json();
+
       if (response.ok) {
+        console.log("Telegram notification sent successfully");
         res.json({ success: true });
       } else {
-        const errData = await response.json();
-        console.error("Telegram API error:", errData);
-        res.status(500).json({ error: "Failed to send Telegram notification" });
+        console.error("Telegram API error details:", JSON.stringify(result, null, 2));
+        res.status(500).json({ 
+          error: "Failed to send Telegram notification", 
+          details: result.description || "Unknown Telegram error" 
+        });
       }
     } catch (error) {
-      console.error("Server error:", error);
+      console.error("Server error during notification:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
