@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      // In this app, we'll allow the owner of the project (your email) to be admin
+      // For demo purposes, we will check if the user is signed in.
+      // Ideally, there should be an 'admins' collection.
+      return isSignedIn() && (request.auth.token.email == 'eyfelchik@gmail.com' && request.auth.token.email_verified == true);
+    }
+
+    match /registrations/{registrationId} {
+      allow create: if true; // Allow anyone to register
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+  }
+}

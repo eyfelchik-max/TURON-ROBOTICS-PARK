@@ -1,0 +1,27 @@
+{
+  "entities": {
+    "Registration": {
+      "title": "Registration",
+      "description": "User registration data",
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "phone": { "type": "string" },
+        "telegram": { "type": "string" },
+        "region": { "type": "string" },
+        "district": { "type": "string" },
+        "neighborhood": { "type": "string" },
+        "age": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["firstName", "lastName", "phone", "region", "district", "neighborhood", "age", "createdAt"]
+    }
+  },
+  "firestore": {
+    "registrations/{registrationId}": {
+      "schema": "Registration",
+      "description": "Collection of user registrations"
+    }
+  }
+}
