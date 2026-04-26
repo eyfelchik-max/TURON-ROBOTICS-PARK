@@ -22,12 +22,15 @@ async function startServer() {
     const chatId = process.env.TELEGRAM_CHAT_ID || "-1003722111761";
 
     if (!botToken) {
-      console.warn("TELEGRAM_BOT_TOKEN is not set. Skipping notification.");
-      return res.status(500).json({ error: "Notification service not configured" });
+      console.warn("TELEGRAM_BOT_TOKEN is not set.");
+      return res.status(500).json({ 
+        error: "Telegram Bot configured emas", 
+        details: "TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi topilmadi." 
+      });
     }
 
-    const escapeHTML = (str: string = "") => {
-      return String(str)
+    const escapeHTML = (str: any = "") => {
+      return String(str || "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -40,7 +43,7 @@ async function startServer() {
 
 👤 <b>Ism:</b> ${escapeHTML(data.firstName)}
 👥 <b>Familiya:</b> ${escapeHTML(data.lastName)}
-📞 <b>Tel:</b> ${escapeHTML(data.phone)}
+📞 <b>Tel:</b> <code>${escapeHTML(data.phone)}</code>
 📨 <b>Telegram:</b> @${escapeHTML(data.telegram)}
 📍 <b>Hudud:</b> ${escapeHTML(data.region)}, ${escapeHTML(data.district)}
 🏠 <b>Mahalla:</b> ${escapeHTML(data.neighborhood)}
@@ -67,15 +70,24 @@ async function startServer() {
         res.json({ success: true });
       } else {
         console.error("Telegram API error details:", JSON.stringify(result, null, 2));
-        res.status(500).json({ 
-          error: "Failed to send Telegram notification", 
-          details: result.description || "Unknown Telegram error" 
+        res.status(response.status).json({ 
+          error: "Telegram xabari yuborilmadi", 
+          details: result.description || "Noma'lum Telegram xatoligi",
+          raw: result
         });
       }
     } catch (error) {
       console.error("Server error during notification:", error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: "Server xatoligi", details: error instanceof Error ? error.message : "Noma'lum xato" });
     }
+  });
+
+  // Health check for admin to see if bot is configured
+  app.get("/api/bot-status", (req, res) => {
+    res.json({
+      isConfigured: !!process.env.TELEGRAM_BOT_TOKEN,
+      chatId: process.env.TELEGRAM_CHAT_ID ? "O'rnatilgan" : "O'rnatilmagan (Default ishlatiladi)"
+    });
   });
 
   // Vite middleware for development

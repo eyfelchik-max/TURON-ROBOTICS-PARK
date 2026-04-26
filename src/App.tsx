@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, Phone, Send, MapPin, Calendar, CheckCircle2, ChevronRight, 
   Hash, LayoutDashboard, LogOut, Trash2, Search, Filter, Mail, Lock, Eye, EyeOff, HelpCircle, X, Info,
-  ShieldCheck, Home, ArrowRight
+  ShieldCheck, Home, ArrowRight, Download
 } from 'lucide-react';
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
   User as FirebaseUser, 
@@ -40,6 +40,8 @@ export default function App() {
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<{success: boolean, message?: string} | null>(null);
+  const [botConfigured, setBotConfigured] = useState<boolean | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [adminFilters, setAdminFilters] = useState({
@@ -74,7 +76,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const isAdmin = user?.email === 'eyfelchik@gmail.com';
+  const isAdmin = user?.email === 'eyfelchik@gmail.com' || user?.email === 'cinselc@gmail.com';
 
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -368,8 +370,19 @@ export default function App() {
   useEffect(() => {
     if (view === 'admin' && isAdmin) {
       fetchRegistrations();
+      checkBotStatus();
     }
   }, [view, isAdmin]);
+
+  const checkBotStatus = async () => {
+    try {
+      const res = await fetch("/api/bot-status");
+      const data = await res.json();
+      setBotConfigured(data.isConfigured);
+    } catch (err) {
+      console.error("Bot status check error:", err);
+    }
+  };
 
   const neighborhoodOptions = formData.district ? NEIGHBORHOOD_SAMPLES[formData.district] || [] : [];
 
@@ -402,6 +415,7 @@ export default function App() {
     e.preventDefault();
     if (validate()) {
       setLoading(true);
+      setTelegramStatus(null);
       try {
         await addDoc(collection(db, 'registrations'), {
           ...formData,
@@ -411,13 +425,21 @@ export default function App() {
         
         // Send Telegram notification
         try {
-          await fetch("/api/notify", {
+          const res = await fetch("/api/notify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ data: formData }),
           });
-        } catch (notifyErr) {
+          const result = await res.json();
+          if (res.ok) {
+            setTelegramStatus({ success: true });
+          } else {
+            setTelegramStatus({ success: false, message: result.details });
+            console.error("Telegram notification failed:", result);
+          }
+        } catch (notifyErr: any) {
           console.error("Failed to send Telegram notification:", notifyErr);
+          setTelegramStatus({ success: false, message: notifyErr.message });
         }
 
         setIsSubmitted(true);
@@ -455,7 +477,12 @@ export default function App() {
     
     setIsBulkDeleting(true);
     try {
-      await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'registrations', id))));
+      const batch = writeBatch(db);
+      selectedIds.forEach(id => {
+        batch.delete(doc(db, 'registrations', id));
+      });
+      await batch.commit();
+      
       setRegistrations(prev => prev.filter(r => !selectedIds.includes(r.id)));
       setSelectedIds([]);
     } catch (error) {
@@ -478,6 +505,38 @@ export default function App() {
     setSelectedIds(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
+  };
+
+  const handleDownloadCSV = () => {
+    if (!filteredRegistrations.length) return;
+    
+    const headers = ["Ism", "Familiya", "Telefon", "Telegram", "Viloyat", "Tuman", "Mahalla", "Yosh", "Sana"];
+    const rows = filteredRegistrations.map(r => [
+      r.firstName,
+      r.lastName,
+      r.phone,
+      `@${r.telegram}`,
+      r.region,
+      r.district,
+      r.neighborhood,
+      r.age,
+      r.createdAt?.toDate().toLocaleDateString()
+    ]);
+
+    const csvContent = "\uFEFF" + [
+      headers.join(","),
+      ...rows.map(r => r.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `registrations_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredRegistrations = useMemo(() => {
@@ -745,9 +804,17 @@ export default function App() {
                     <option key={dist} value={dist} className="bg-white">{dist}</option>
                   ))}
                 </select>
+                <div className="w-[1px] h-4 bg-slate-200" />
+                <input 
+                  type="text"
+                  placeholder="Mahalla..."
+                  className="pl-4 pr-4 py-3 bg-transparent outline-none text-sm font-bold text-slate-700 w-[140px]"
+                  value={adminFilters.neighborhood}
+                  onChange={(e) => setAdminFilters({ ...adminFilters, neighborhood: e.target.value })}
+                />
               </div>
 
-              {(adminFilters.region || searchTerm) && (
+              {(adminFilters.region || searchTerm || adminFilters.neighborhood) && (
                 <button 
                   onClick={() => {
                     setAdminFilters({ region: '', district: '', neighborhood: '' });
@@ -760,6 +827,14 @@ export default function App() {
                 </button>
               )}
               
+              <button 
+                onClick={handleDownloadCSV}
+                className="w-12 h-12 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-full hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm"
+                title="CSV yuklash"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+
               <button 
                 onClick={fetchRegistrations}
                 disabled={loading}
@@ -800,6 +875,20 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {botConfigured === false && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-700"
+          >
+            <Info className="w-5 h-5" />
+            <div className="text-sm">
+              <span className="font-bold">Telegram Bot o'rnatilmagan!</span> 
+              Yangi arizalar guruhga bormaydi. Iltimos, <code>TELEGRAM_BOT_TOKEN</code> ni sozlang.
+            </div>
+          </motion.div>
+        )}
       </div>
 
       <div className="overflow-x-auto relative min-h-[500px]">
@@ -1058,7 +1147,15 @@ export default function App() {
                 <CheckCircle2 className="w-10 h-10 text-blue-600" />
               </div>
               <h2 className="text-3xl font-bold text-slate-900 mb-3">Yuborildi!</h2>
-              <p className="text-slate-500 mb-10 text-lg">Ma'lumotlaringiz muvaffaqiyatli yuborildi. Tez orada biz siz bilan bog'lanamiz.</p>
+              <p className="text-slate-500 mb-6 text-lg">Ma'lumotlaringiz muvaffaqiyatli yuborildi. Tez orada biz siz bilan bog'lanamiz.</p>
+              
+              {telegramStatus && !telegramStatus.success && (
+                <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm">
+                  <div className="font-bold mb-1">Telegram xabarnomasi yuborilmadi:</div>
+                  <div className="opacity-80 italic">{telegramStatus.message || "Server xatosi"}</div>
+                </div>
+              )}
+
               <button 
                 onClick={() => setIsSubmitted(false)}
                 className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98]"
