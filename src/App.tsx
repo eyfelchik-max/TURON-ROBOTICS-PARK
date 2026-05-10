@@ -42,6 +42,8 @@ export default function App() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<{success: boolean, message?: string} | null>(null);
   const [botConfigured, setBotConfigured] = useState<boolean | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean, message: string} | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [adminFilters, setAdminFilters] = useState({
@@ -384,6 +386,24 @@ export default function App() {
     }
   };
 
+  const handleTestBot = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/test-telegram", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setTestResult({ success: true, message: "Bot muvaffaqiyatli ulandi! Telegram guruhingizni tekshiring." });
+      } else {
+        setTestResult({ success: false, message: data.error || "Xatolik yuz berdi" });
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.message });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   const neighborhoodOptions = formData.district ? NEIGHBORHOOD_SAMPLES[formData.district] || [] : [];
 
   const validate = () => {
@@ -717,22 +737,26 @@ export default function App() {
           {errors.neighborhood && <p className="text-xs text-red-600 ml-1">{errors.neighborhood}</p>}
         </div>
 
-        {/* Telegram */}
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-slate-700 ml-1">Telegram foydalanuvchi nomi</label>
-          <div className="relative">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-slate-400 font-bold">@</div>
-            <input
-              name="telegram"
-              type="text"
-              placeholder="username"
-              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input ${errors.telegram ? 'border-red-500/50' : ''}`}
-              value={formData.telegram}
-              onChange={(e) => setFormData({ ...formData, telegram: e.target.value.replace('@', '') })}
-            />
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-slate-700 ml-1">Telegram foydalanuvchi nomi</label>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-slate-400 font-bold">@</div>
+              <input
+                name="telegram"
+                type="text"
+                placeholder="username"
+                className={`w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input ${errors.telegram ? 'border-red-500/50' : ''}`}
+                value={formData.telegram}
+                onChange={(e) => {
+                  let val = e.target.value;
+                  val = val.replace(/https?:\/\/t\.me\//, '');
+                  val = val.replace('@', '');
+                  setFormData({ ...formData, telegram: val });
+                }}
+              />
+            </div>
+            {errors.telegram && <p className="text-xs text-red-600 ml-1">{errors.telegram}</p>}
           </div>
-          {errors.telegram && <p className="text-xs text-red-600 ml-1">{errors.telegram}</p>}
-        </div>
 
         <div className="pt-6">
           <button
@@ -876,17 +900,71 @@ export default function App() {
           </div>
         </div>
 
-        {botConfigured === false && (
+        {botConfigured === false ? (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-700"
+            className="mt-6 p-6 bg-red-50 border border-red-200 rounded-[30px] flex flex-col md:flex-row md:items-center justify-between gap-6"
           >
-            <Info className="w-5 h-5" />
-            <div className="text-sm">
-              <span className="font-bold">Telegram Bot o'rnatilmagan!</span> 
-              Yangi arizalar guruhga bormaydi. Iltimos, <code>TELEGRAM_BOT_TOKEN</code> ni sozlang.
+            <div className="flex items-center gap-4 text-red-700">
+              <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center">
+                <Info className="w-6 h-6" />
+              </div>
+              <div className="text-sm">
+                <h4 className="font-black text-base mb-0.5">Telegram Bot o'rnatilmagan!</h4> 
+                <p className="opacity-80">Yangi arizalar guruhga bormaydi. <code>TELEGRAM_BOT_TOKEN</code> ni sozlang.</p>
+              </div>
             </div>
+            <a 
+              href="https://t.me/BotFather" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="px-6 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all text-center text-sm"
+            >
+              @BotFather orqali bot yarating
+            </a>
+          </motion.div>
+        ) : botConfigured === true && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 p-6 bg-slate-50 border border-slate-200 rounded-[30px] flex flex-col gap-6"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4 text-slate-700">
+                <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 rounded-2xl flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div className="text-sm">
+                  <h4 className="font-black text-base mb-0.5">Telegram Bot sozlangan</h4> 
+                  <p className="opacity-80 text-xs">Bot arizalarni guruhga yuborishga tayyor.</p>
+                </div>
+              </div>
+              
+              <button 
+                onClick={handleTestBot}
+                disabled={testLoading}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 hover:text-blue-600 transition-all text-sm disabled:opacity-50"
+              >
+                {testLoading ? (
+                  <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                Botni sinab ko'rish
+              </button>
+            </div>
+
+            {testResult && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className={`p-4 rounded-xl text-sm font-medium flex items-center gap-2 ${testResult.success ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}
+              >
+                {testResult.success ? <CheckCircle2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                {testResult.message}
+              </motion.div>
+            )}
           </motion.div>
         )}
       </div>

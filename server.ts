@@ -25,7 +25,7 @@ async function startServer() {
       console.warn("TELEGRAM_BOT_TOKEN is not set.");
       return res.status(500).json({ 
         error: "Telegram Bot configured emas", 
-        details: "TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi topilmadi." 
+        details: "TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi topilmadi. Iltimos, AI Studio Settings'da ushbu turni qo'shing." 
       });
     }
 
@@ -33,9 +33,7 @@ async function startServer() {
       return String(str || "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+        .replace(/>/g, "&gt;");
     };
 
     const message = `
@@ -79,6 +77,37 @@ async function startServer() {
     } catch (error) {
       console.error("Server error during notification:", error);
       res.status(500).json({ error: "Server xatoligi", details: error instanceof Error ? error.message : "Noma'lum xato" });
+    }
+  });
+
+  // Test Telegram notification
+  app.post("/api/test-telegram", async (req, res) => {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID || "-1003722111761";
+
+    if (!botToken) {
+      return res.status(500).json({ error: "Bot token topilmadi" });
+    }
+
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "🚀 <b>Bot muvaffaqiyatli ulandi!</b>\n\nUshbu xabar bot sozlamalarini tekshirish uchun yuborildi.",
+          parse_mode: "HTML"
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        res.json({ success: true });
+      } else {
+        res.status(response.status).json({ error: result.description });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Xatolik" });
     }
   });
 
