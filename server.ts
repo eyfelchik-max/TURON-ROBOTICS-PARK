@@ -46,7 +46,7 @@ async function startServer() {
     const chatId = (process.env.TELEGRAM_CHAT_ID || "-1003722111761").trim();
 
     try {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -55,9 +55,18 @@ async function startServer() {
           parse_mode: "HTML"
         }),
       });
-      res.json({ success: true, message: "Kod Telegram guruhingizga yuborildi" });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        res.json({ success: true, message: "Kod Telegram guruhingizga yuborildi" });
+      } else {
+        console.error("Telegram API Error (OTP):", result);
+        res.status(500).json({ error: result.description || "Telegram bot xatoligi" });
+      }
     } catch (error) {
-      res.status(500).json({ error: "Kod yuborishda xatolik" });
+      console.error("OTP Send Server Error:", error);
+      res.status(500).json({ error: "Kod yuborishda server xatoligi" });
     }
   });
 

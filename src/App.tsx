@@ -21,7 +21,6 @@ interface FormData {
   firstName: string;
   lastName: string;
   phone: string;
-  telegram: string;
   region: string;
   district: string;
   neighborhood: string;
@@ -29,6 +28,7 @@ interface FormData {
 }
 
 interface RegistrationRecord extends FormData {
+  telegram?: string;
   id: string;
   createdAt: Timestamp;
 }
@@ -76,11 +76,30 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   
+  // Login via Phone state
+  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
+  const [loginPhone, setLoginPhone] = useState('+998');
+  const [loginOtpSent, setLoginOtpSent] = useState(false);
+  const [loginOtpCode, setLoginOtpCode] = useState('');
+  const [loginOtpLoading, setLoginOtpLoading] = useState(false);
+  const [loginOtpError, setLoginOtpError] = useState('');
+  const [loginOtpTimer, setLoginOtpTimer] = useState(0);
+  const [authenticatedPhone, setAuthenticatedPhone] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (loginOtpTimer > 0) {
+      timer = setInterval(() => {
+        setLoginOtpTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [loginOtpTimer]);
+  
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
     phone: '+998',
-    telegram: '',
     region: '',
     district: '',
     neighborhood: '',
@@ -94,7 +113,9 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const isAdmin = user?.email === 'eyfelchik@gmail.com' || user?.email === 'cinselc@gmail.com';
+  const isAdmin = user?.email === 'eyfelchik@gmail.com' || 
+                 user?.email === 'cinselc@gmail.com' || 
+                 authenticatedPhone === '+998881234567'; // Placeholder for admin phone
 
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -203,22 +224,93 @@ export default function App() {
     </motion.div>
   );
 
+  const handleLoginPhoneSendOtp = async () => {
+    if (loginPhone.length < 12) {
+      setLoginOtpError("Raqamni to'g'ri kiriting (masalan: +998 90 123 45 67)");
+      return;
+    }
+    setLoginOtpLoading(true);
+    setLoginOtpError('');
+    try {
+      const res = await fetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loginPhone }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLoginOtpSent(true);
+        setLoginOtpTimer(120);
+        setLoginOtpError('');
+      } else {
+        setLoginOtpError(data.error || "Xatolik yuz berdi");
+      }
+    } catch (err: any) {
+      setLoginOtpError(err.message);
+    } finally {
+      setLoginOtpLoading(false);
+    }
+  };
+
+  const handleLoginPhoneVerifyOtp = async () => {
+    if (loginOtpCode.length < 6) return;
+    setLoginOtpLoading(true);
+    setLoginOtpError('');
+    try {
+      const res = await fetch("/api/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loginPhone, code: loginOtpCode }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAuthenticatedPhone(loginPhone);
+        setView('admin');
+        setLoginOtpSent(false);
+        setLoginOtpCode('');
+      } else {
+        setLoginOtpError(data.error || "Kod noto'g'ri");
+      }
+    } catch (err: any) {
+      setLoginOtpError(err.message);
+    } finally {
+      setLoginOtpLoading(false);
+    }
+  };
+
   const renderAuth = () => (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className="glass-card p-10 rounded-[40px] max-w-md mx-auto relative z-10"
     >
-      <div className="text-center mb-10">
+      <div className="text-center mb-8">
         <h2 className="text-3xl font-extrabold text-slate-900 mb-3">
           {authMode === 'login' ? 'Xush Kelibsiz' : (authMode === 'signup' ? 'Hisob Yarating' : 'Parolni Tiklash')}
         </h2>
-        <p className="text-slate-500">
+        <p className="text-slate-500 text-sm font-medium">
           {authMode === 'login' 
             ? 'Portalga kirish uchun ma\'lumotlaringizni kiriting' 
             : (authMode === 'signup' ? 'Yangi hisob yarating' : 'Emailingizga tiklash havolasini yuboramiz')}
         </p>
       </div>
+
+      {authMode === 'login' && !resetSent && (
+        <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
+          <button
+            onClick={() => setLoginMethod('email')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${loginMethod === 'email' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Email orqali
+          </button>
+          <button
+            onClick={() => setLoginMethod('phone')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${loginMethod === 'phone' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Telefon orqali
+          </button>
+        </div>
+      )}
 
       {resetSent ? (
         <div className="text-center space-y-8 py-6">
@@ -242,102 +334,202 @@ export default function App() {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleAuth} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 ml-1">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="email"
-                required
-                className="w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input"
-                placeholder="example@mail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {authMode !== 'forgot-password' && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <label className="text-sm font-semibold text-slate-700">Parol</label>
-                {authMode === 'login' && (
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('forgot-password')}
-                    className="text-xs text-blue-600 font-bold hover:text-blue-500 transition-colors"
-                  >
-                    Unutdingizmi?
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  className="w-full pl-12 pr-12 py-3.5 rounded-2xl glass-input"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {authError && (
-            <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl text-center">
-              <p className="text-sm text-red-600 font-medium">{authError}</p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98] disabled:opacity-50"
-          >
-            {loading ? (
-              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-            ) : (
-              authMode === 'login' ? 'Kirish' : (authMode === 'signup' ? 'Ro\'yxatdan o\'tish' : 'Emailni yuborish')
-            )}
-          </button>
-
-          {authMode !== 'forgot-password' && (
-            <div className="space-y-6">
-              <div className="relative text-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200"></div>
+        <div className="space-y-6">
+          {loginMethod === 'email' || authMode !== 'login' ? (
+            <form onSubmit={handleAuth} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700 ml-1">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    className="w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input"
+                    placeholder="example@mail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
-                <span className="relative px-4 bg-white text-sm text-slate-500 uppercase tracking-widest font-bold">Yoki</span>
               </div>
+
+              {authMode !== 'forgot-password' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <label className="text-sm font-semibold text-slate-700">Parol</label>
+                    {authMode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('forgot-password')}
+                        className="text-xs text-blue-600 font-bold hover:text-blue-500 transition-colors"
+                      >
+                        Unutdingizmi?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      className="w-full pl-12 pr-12 py-3.5 rounded-2xl glass-input"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {authError && (
+                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl text-center">
+                  <p className="text-sm text-red-600 font-medium">{authError}</p>
+                </div>
+              )}
 
               <button
-                type="button"
-                onClick={() => {
-                  signInWithGoogle();
-                  setView('form');
-                }}
-                className="w-full py-4 rounded-2xl border border-slate-200 text-slate-900 font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all"
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98] disabled:opacity-50"
               >
-                <svg viewBox="0 0 24 24" className="w-5 h-5">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                </svg>
-                Google orqali kirish
+                {loading ? (
+                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+                ) : (
+                  authMode === 'login' ? 'Kirish' : (authMode === 'signup' ? 'Ro\'yxatdan o\'tish' : 'Emailni yuborish')
+                )}
               </button>
+            </form>
+          ) : (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700 ml-1">Telefon raqami</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-grow">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="tel"
+                      disabled={loginOtpSent}
+                      placeholder="+998 90 123 45 67"
+                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input outline-none focus:border-blue-500/50"
+                      value={loginPhone}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (!val.startsWith('+998')) val = '+998';
+                        const numbers = val.slice(4).replace(/\D/g, '');
+                        setLoginPhone('+998' + numbers.slice(0, 9));
+                      }}
+                    />
+                  </div>
+                  {!loginOtpSent && (
+                    <button
+                      type="button"
+                      onClick={handleLoginPhoneSendOtp}
+                      disabled={loginOtpLoading || (loginOtpSent && loginOtpTimer > 0)}
+                      className="px-6 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm whitespace-nowrap min-w-[120px]"
+                    >
+                      {loginOtpLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : "Kod olish"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {loginOtpSent && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-4 pt-2"
+                  >
+                    <div className="flex gap-2">
+                      <div className="relative flex-grow">
+                        <input
+                          type="text"
+                          maxLength={6}
+                          placeholder="000 000"
+                          className="w-full px-4 py-4 rounded-2xl bg-white border border-slate-200 text-center tracking-[0.5em] font-black text-xl text-slate-900 focus:border-blue-500 outline-none transition-all"
+                          value={loginOtpCode}
+                          onChange={(e) => setLoginOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleLoginPhoneVerifyOtp}
+                        disabled={loginOtpLoading || loginOtpCode.length < 6}
+                        className="px-10 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm shadow-lg shadow-blue-600/20"
+                      >
+                        {loginOtpLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : "Kirish"}
+                      </button>
+                    </div>
+
+                    {loginOtpSent && !loginOtpError && (
+                      <p className="text-xs text-emerald-500 ml-1 font-medium flex items-center gap-2">
+                        <CheckCircle2 className="w-3 h-3" /> Kod yuborildi
+                      </p>
+                    )}
+                    {loginOtpError && <p className="text-xs text-red-500 ml-1 font-medium">{loginOtpError}</p>}
+
+                    <div className="flex justify-between items-center px-1">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setLoginOtpSent(false);
+                          setLoginOtpCode('');
+                        }}
+                        className="text-xs text-slate-500 hover:text-slate-900 font-medium transition-colors"
+                      >
+                        Raqamni o'zgartirish
+                      </button>
+                      {loginOtpTimer === 0 ? (
+                        <button 
+                          type="button"
+                          onClick={handleLoginPhoneSendOtp}
+                          className="text-xs text-blue-600 font-bold hover:underline"
+                        >
+                          Qayta yuborish
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400 font-medium">
+                          {Math.floor(loginOtpTimer / 60)}:{(loginOtpTimer % 60).toString().padStart(2, '0')}
+                        </span>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
+
+          <div className="space-y-6">
+            <div className="relative text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-100"></div>
+              </div>
+              <span className="relative px-4 bg-white text-[10px] text-slate-400 uppercase tracking-widest font-black">Yoki</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                signInWithGoogle();
+                setView('form');
+              }}
+              className="w-full py-4 rounded-2xl border border-slate-200 text-slate-900 font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+              </svg>
+              Google orqali kirish
+            </button>
+          </div>
 
           <div className="text-center pt-2">
             {authMode === 'login' ? (
@@ -365,7 +557,7 @@ export default function App() {
               </button>
             )}
           </div>
-        </form>
+        </div>
       )}
     </motion.div>
   );
@@ -428,7 +620,6 @@ export default function App() {
     if (!formData.lastName.trim()) newErrors.lastName = "Familiyangizni kiriting";
     if (formData.phone.length < 13) newErrors.phone = "Telefon raqamini to'liq kiriting";
     if (!isVerified) newErrors.phone = "Telefon raqamini tasdiqlang";
-    if (!formData.telegram.trim()) newErrors.telegram = "Telegram foydalanuvchi nomini kiriting";
     if (!formData.region) newErrors.region = "Viloyatni tanlang";
     if (!formData.district.trim()) newErrors.district = "Tumanni tanlang";
     if (!formData.neighborhood.trim()) newErrors.neighborhood = "Mahallani tanlang";
@@ -500,7 +691,7 @@ export default function App() {
         setIsOtpSent(false);
         setOtpCode('');
         setFormData({
-          firstName: '', lastName: '', phone: '+998', telegram: '',
+          firstName: '', lastName: '', phone: '+998',
           region: '', district: '', neighborhood: '', age: ''
         });
       } catch (err) {
@@ -600,8 +791,7 @@ export default function App() {
       const matchesSearch = 
         r.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.phone.includes(searchTerm) ||
-        r.telegram.toLowerCase().includes(searchTerm.toLowerCase());
+        r.phone.includes(searchTerm);
       
       const matchesRegion = !adminFilters.region || r.region === adminFilters.region;
       const matchesDistrict = !adminFilters.district || r.district === adminFilters.district;
@@ -622,8 +812,8 @@ export default function App() {
   };
 
   const handleSendOtp = async () => {
-    if (formData.phone.length < 13) {
-      setErrors({ ...errors, phone: "Raqamni to'liq kiriting" });
+    if (formData.phone.length < 12) {
+      setErrors({ ...errors, phone: "Raqamni to'g'ri kiriting" });
       return;
     }
     setOtpLoading(true);
@@ -639,6 +829,7 @@ export default function App() {
         setIsOtpSent(true);
         setOtpTimer(120); // 2 minutes
         setOtpError('');
+        setErrors({ ...errors, phone: undefined });
       } else {
         setOtpError(data.error || "Xatolik yuz berdi");
       }
@@ -748,7 +939,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleSendOtp}
-                  disabled={otpLoading || formData.phone.length < 13 || (isOtpSent && otpTimer > 0)}
+                  disabled={otpLoading || (isOtpSent && otpTimer > 0)}
                   className="px-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm whitespace-nowrap min-w-[120px]"
                 >
                   {otpLoading ? (
@@ -771,10 +962,16 @@ export default function App() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4 mt-3 p-5 rounded-3xl bg-slate-50 border border-slate-100 overflow-hidden"
+                  className="space-y-4 mt-3 p-5 rounded-3xl bg-slate-50 border border-slate-100 overflow-hidden shadow-sm"
                 >
+                  {isOtpSent && !otpError && (
+                    <div className="flex items-center gap-3 text-emerald-600 bg-emerald-500/5 p-3 rounded-2xl border border-emerald-500/10 mb-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <p className="text-xs font-semibold">Kod yuborildi. Telegram guruhingizni tekshiring.</p>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 text-slate-600">
-                    <Info className="w-4 h-4" />
+                    <Info className="w-4 h-4 text-blue-500" />
                     <p className="text-xs">Tasdiqlash kodi Telegram guruhingizga yuborildi.</p>
                   </div>
                   
@@ -793,7 +990,7 @@ export default function App() {
                       type="button"
                       onClick={handleVerifyOtp}
                       disabled={otpLoading || otpCode.length < 6}
-                      className="px-8 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-500 disabled:opacity-50 transition-all text-sm shadow-lg shadow-emerald-600/20"
+                      className="px-8 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm shadow-lg shadow-blue-600/20"
                     >
                       {otpLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : "Tasdiqlash"}
                     </button>
@@ -820,7 +1017,7 @@ export default function App() {
                     >
                       Raqamni o'zgartirish
                     </button>
-                    {otpTimer === 0 && (
+                    {otpTimer === 0 ? (
                       <button 
                         type="button"
                         onClick={handleSendOtp}
@@ -828,6 +1025,10 @@ export default function App() {
                       >
                         Kodni qayta yuborish
                       </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">
+                        {Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')}
+                      </span>
                     )}
                   </div>
                 </motion.div>
@@ -921,27 +1122,6 @@ export default function App() {
           {errors.neighborhood && <p className="text-xs text-red-600 ml-1">{errors.neighborhood}</p>}
         </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-slate-700 ml-1">Telegram foydalanuvchi nomi</label>
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-slate-400 font-bold">@</div>
-              <input
-                name="telegram"
-                type="text"
-                placeholder="username"
-                className={`w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input ${errors.telegram ? 'border-red-500/50' : ''}`}
-                value={formData.telegram}
-                onChange={(e) => {
-                  let val = e.target.value;
-                  val = val.replace(/https?:\/\/t\.me\//, '');
-                  val = val.replace('@', '');
-                  setFormData({ ...formData, telegram: val });
-                }}
-              />
-            </div>
-            {errors.telegram && <p className="text-xs text-red-600 ml-1">{errors.telegram}</p>}
-          </div>
-
         <div className="pt-6">
           <button
             type="submit"
@@ -981,7 +1161,7 @@ export default function App() {
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-all duration-300 group-focus-within:scale-110" />
               <input 
                 type="text"
-                placeholder="Ism, raqam yoki telegram..."
+                placeholder="Ism yoki raqam orqali qidirish..."
                 className="w-full pl-14 pr-6 py-4 bg-slate-100/50 border border-slate-200 rounded-3xl outline-none focus:border-blue-500/50 focus:bg-white focus:shadow-xl focus:shadow-blue-500/5 transition-all text-sm text-slate-900 placeholder:text-slate-400"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1208,19 +1388,19 @@ export default function App() {
                   <div className="text-[10px] font-medium text-slate-400 tracking-wider">ID: {reg.id.slice(0, 8).toUpperCase()}</div>
                 </td>
                 <td className="px-10 py-8">
-                  <div className="space-y-1.5">
-                    <div className="text-sm font-bold text-slate-700 flex items-center gap-2 group-hover:text-blue-600 transition-colors">
-                      <Phone className="w-3.5 h-3.5 opacity-50" /> {reg.phone}
-                    </div>
+                  <div className="text-sm font-bold text-slate-700 flex items-center gap-2 group-hover:text-blue-600 transition-colors">
+                    <Phone className="w-3.5 h-3.5 opacity-50" /> {reg.phone}
+                  </div>
+                  {reg.telegram && (
                     <a 
                       href={`https://t.me/${reg.telegram}`} 
                       target="_blank" 
                       rel="noreferrer"
-                      className="text-xs text-blue-500 font-bold hover:text-blue-700 flex items-center gap-2 transition-colors"
+                      className="text-xs text-blue-500 font-bold hover:text-blue-700 flex items-center gap-2 mt-1.5 transition-colors"
                     >
                       <Send className="w-3.5 h-3.5" /> @{reg.telegram}
                     </a>
-                  </div>
+                  )}
                 </td>
                 <td className="px-10 py-8">
                   <div className="font-bold text-slate-700 text-sm mb-0.5">{reg.region}</div>
@@ -1408,22 +1588,15 @@ export default function App() {
               <div className="w-20 h-20 bg-blue-600/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 className="w-10 h-10 text-blue-600" />
               </div>
-              <h2 className="text-3xl font-bold text-slate-900 mb-3">Yuborildi!</h2>
-              <p className="text-slate-500 mb-6 text-lg">Ma'lumotlaringiz muvaffaqiyatli yuborildi. Tez orada biz siz bilan bog'lanamiz.</p>
-              
-              {telegramStatus && !telegramStatus.success && (
-                <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm">
-                  <div className="font-bold mb-1">Telegram xabarnomasi yuborilmadi:</div>
-                  <div className="opacity-80 italic">{telegramStatus.message || "Server xatosi"}</div>
-                </div>
-              )}
-
-              <button 
-                onClick={() => setIsSubmitted(false)}
-                className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98]"
-              >
-                Yana ariza topshirish
-              </button>
+          <h2 className="text-3xl font-bold text-slate-900 mb-3">Yuborildi!</h2>
+          <p className="text-slate-500 mb-8 text-lg">Ma'lumotlaringiz muvaffaqiyatli yuborildi. Tez orada biz siz bilan bog'lanamiz.</p>
+          
+          <button 
+            onClick={() => setIsSubmitted(false)}
+            className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98]"
+          >
+            Yana ariza topshirish
+          </button>
             </motion.div>
           ) : (
             view === 'form' ? renderForm() : (view === 'admin' ? renderAdmin() : renderAuth())
