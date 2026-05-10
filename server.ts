@@ -15,6 +15,9 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  
+  // In-memory store for OTPs (for production use Redis or Database)
+  const otps: Record<string, { code: string, expires: number }> = {};
 
   // Global Logger
   app.use((req, res, next) => {
@@ -24,6 +27,54 @@ async function startServer() {
 
   app.get("/api/ping", (req, res) => {
     res.json({ message: "pong", time: new Date().toISOString(), version: "1.0.1" });
+  });
+
+  // OTP Send Route
+  app.post("/api/otp/send", async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: "Telefon raqami kiritilmagan" });
+
+    // Generate 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = Date.now() + 2 * 60 * 1000; // 2 minutes
+
+    otps[phone] = { code: otpCode, expires };
+
+    console.log(`[OTP] Sent to ${phone}: ${otpCode}`);
+
+    const botToken = (process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk").trim();
+    const chatId = (process.env.TELEGRAM_CHAT_ID || "-1003722111761").trim();
+
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: templates.otpMessage(phone, otpCode),
+          parse_mode: "HTML"
+        }),
+      });
+      res.json({ success: true, message: "Kod Telegram guruhingizga yuborildi" });
+    } catch (error) {
+      res.status(500).json({ error: "Kod yuborishda xatolik" });
+    }
+  });
+
+  // OTP Verify Route
+  app.post("/api/otp/verify", (req, res) => {
+    const { phone, code } = req.body;
+    const stored = otps[phone];
+
+    if (!stored) return res.status(400).json({ error: "Kod yuborilmagan yoki eskirgan" });
+    if (stored.expires < Date.now()) {
+      delete otps[phone];
+      return res.status(400).json({ error: "Kod muddati tugagan" });
+    }
+    if (stored.code !== code) return res.status(400).json({ error: "Noto'g'ri kod kiritildi" });
+
+    delete otps[phone];
+    res.json({ success: true });
   });
 
   // API Route for Telegram notifications

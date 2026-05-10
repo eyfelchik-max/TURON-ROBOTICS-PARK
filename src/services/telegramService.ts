@@ -44,5 +44,14 @@ export const templates = {
 🛰 <b>Server:</b> AI Studio Cloud Run
 
 <i>Ushbu xabar bot sozlamalarining to'g'ri ishlashini tasdiqlash uchun yuborildi.</i>
+  `.trim(),
+
+  otpMessage: (phone: string, code: string) => `
+🔑 <b>TASDIQLASH KODI</b>
+━━━━━━━━━━━━━━━━━━
+📞 <b>Telefon:</b> <code>${phone}</code>
+🔢 <b>Kod:</b> <code>${code}</code>
+
+<i>Ushbu kodni ro'yxatdan o'tish formasiga kiriting. Kod 2 daqiqa davomida amal qiladi.</i>
   `.trim()
 };
