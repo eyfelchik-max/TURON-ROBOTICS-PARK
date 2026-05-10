@@ -93,12 +93,18 @@ async function startServer() {
     }
   });
 
+  // Health check for admin to see if bot is configured
   app.get("/api/bot-status", (req, res) => {
     const isTokenSet = !!(process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk");
     res.json({
       isConfigured: isTokenSet,
       chatId: (process.env.TELEGRAM_CHAT_ID || "-1003722111761") ? "O'rnatilgan" : "O'rnatilmagan"
     });
+  });
+
+  // API 404 Handler - MUST be before Vite/Static middleware
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: "API yo'li topilmadi", path: req.path });
   });
 
   // Vite middleware for development

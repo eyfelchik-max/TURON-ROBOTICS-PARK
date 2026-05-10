@@ -450,12 +450,25 @@ export default function App() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ data: formData }),
           });
-          const result = await res.json();
-          if (res.ok) {
-            setTelegramStatus({ success: true });
+          
+          const contentType = res.headers.get("content-type");
+          let result;
+          
+          if (contentType && contentType.includes("application/json")) {
+            result = await res.json();
+            if (res.ok) {
+              setTelegramStatus({ success: true });
+            } else {
+              setTelegramStatus({ success: false, message: result.details || result.error || "Noma'lum xatolik" });
+              console.error("Telegram notification failed:", result);
+            }
           } else {
-            setTelegramStatus({ success: false, message: result.details });
-            console.error("Telegram notification failed:", result);
+            const errorText = await res.text();
+            console.error("Non-JSON response from server:", errorText);
+            setTelegramStatus({ 
+              success: false, 
+              message: `Server noto'g'ri formatda javob qaytardi (${res.status}). Iltimos, server sozlamalarini tekshiring.` 
+            });
           }
         } catch (notifyErr: any) {
           console.error("Failed to send Telegram notification:", notifyErr);
