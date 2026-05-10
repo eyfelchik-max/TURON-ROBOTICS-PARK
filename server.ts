@@ -19,7 +19,7 @@ async function startServer() {
   // API Route for Telegram notifications
   app.post("/api/notify", async (req, res) => {
     const { data } = req.body;
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk";
     const chatId = process.env.TELEGRAM_CHAT_ID || "-1003722111761";
 
     if (!botToken) {
@@ -64,7 +64,7 @@ async function startServer() {
 
   // Test Telegram notification
   app.post("/api/test-telegram", async (req, res) => {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk";
     const chatId = process.env.TELEGRAM_CHAT_ID || "-1003722111761";
 
     if (!botToken) {
@@ -93,11 +93,11 @@ async function startServer() {
     }
   });
 
-  // Health check for admin to see if bot is configured
   app.get("/api/bot-status", (req, res) => {
+    const isTokenSet = !!(process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk");
     res.json({
-      isConfigured: !!process.env.TELEGRAM_BOT_TOKEN,
-      chatId: process.env.TELEGRAM_CHAT_ID ? "O'rnatilgan" : "O'rnatilmagan (Default ishlatiladi)"
+      isConfigured: isTokenSet,
+      chatId: (process.env.TELEGRAM_CHAT_ID || "-1003722111761") ? "O'rnatilgan" : "O'rnatilmagan"
     });
   });
 
