@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { templates } from "./src/services/telegramService";
 
 dotenv.config();
 
@@ -29,26 +30,7 @@ async function startServer() {
       });
     }
 
-    const escapeHTML = (str: any = "") => {
-      return String(str || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    };
-
-    const message = `
-🌐 <b>Yangi ariza kelib tushdi!</b>
-
-👤 <b>Ism:</b> ${escapeHTML(data.firstName)}
-👥 <b>Familiya:</b> ${escapeHTML(data.lastName)}
-📞 <b>Tel:</b> <code>${escapeHTML(data.phone)}</code>
-📨 <b>Telegram:</b> @${escapeHTML(data.telegram)}
-📍 <b>Hudud:</b> ${escapeHTML(data.region)}, ${escapeHTML(data.district)}
-🏠 <b>Mahalla:</b> ${escapeHTML(data.neighborhood)}
-🎂 <b>Yosh:</b> ${escapeHTML(data.age)}
-
-#yangi_ariza #turon_robotics_park
-    `.trim();
+    const message = templates.newRegistration(data);
 
     try {
       const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -95,7 +77,7 @@ async function startServer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
-          text: "🚀 <b>Bot muvaffaqiyatli ulandi!</b>\n\nUshbu xabar bot sozlamalarini tekshirish uchun yuborildi.",
+          text: templates.testMessage(),
           parse_mode: "HTML"
         }),
       });
