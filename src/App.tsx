@@ -459,7 +459,10 @@ export default function App() {
             if (res.ok) {
               setTelegramStatus({ success: true });
             } else {
-              setTelegramStatus({ success: false, message: result.details || result.error || "Noma'lum xatolik" });
+              setTelegramStatus({ 
+                success: false, 
+                message: `Xato: ${result.details || result.error || "Noma'lum"}. (Status: ${res.status})` 
+              });
               console.error("Telegram notification failed:", result);
             }
           } else {
@@ -467,7 +470,7 @@ export default function App() {
             console.error("Non-JSON response from server:", errorText);
             setTelegramStatus({ 
               success: false, 
-              message: `Server noto'g'ri formatda javob qaytardi (${res.status}). Iltimos, server sozlamalarini tekshiring.` 
+              message: `Server noto'g'ri javob qaytardi (${res.status}). Javob: ${errorText.substring(0, 50)}...` 
             });
           }
         } catch (notifyErr: any) {

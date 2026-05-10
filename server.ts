@@ -16,11 +16,26 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Global Logger
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+  });
+
+  app.get("/api/ping", (req, res) => {
+    res.json({ message: "pong", time: new Date().toISOString(), version: "1.0.1" });
+  });
+
   // API Route for Telegram notifications
-  app.post("/api/notify", async (req, res) => {
+  app.all("/api/notify", async (req, res) => {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed. Use POST." });
+    }
     const { data } = req.body;
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk";
-    const chatId = process.env.TELEGRAM_CHAT_ID || "-1003722111761";
+    console.log(`[API] Processing notification for: ${data?.firstName} ${data?.lastName}`);
+    
+    const botToken = (process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk").trim();
+    const chatId = (process.env.TELEGRAM_CHAT_ID || "-1003722111761").trim();
 
     if (!botToken) {
       console.warn("TELEGRAM_BOT_TOKEN is not set.");
@@ -64,8 +79,9 @@ async function startServer() {
 
   // Test Telegram notification
   app.post("/api/test-telegram", async (req, res) => {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk";
-    const chatId = process.env.TELEGRAM_CHAT_ID || "-1003722111761";
+    console.log("[API] /api/test-telegram called");
+    const botToken = (process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk").trim();
+    const chatId = (process.env.TELEGRAM_CHAT_ID || "-1003722111761").trim();
 
     if (!botToken) {
       return res.status(500).json({ error: "Bot token topilmadi" });
@@ -95,16 +111,24 @@ async function startServer() {
 
   // Health check for admin to see if bot is configured
   app.get("/api/bot-status", (req, res) => {
+    console.log("[API] /api/bot-status called");
     const isTokenSet = !!(process.env.TELEGRAM_BOT_TOKEN || "8761040668:AAGbty5rJDkDzZwL-AHGaGbWHj0o3ynivTk");
     res.json({
       isConfigured: isTokenSet,
-      chatId: (process.env.TELEGRAM_CHAT_ID || "-1003722111761") ? "O'rnatilgan" : "O'rnatilmagan"
+      chatId: (process.env.TELEGRAM_CHAT_ID || "-1003722111761") ? "O'rnatilgan" : "O'rnatilmagan",
+      version: "1.0.1"
     });
   });
 
   // API 404 Handler - MUST be before Vite/Static middleware
-  app.all("/api/*", (req, res) => {
-    res.status(404).json({ error: "API yo'li topilmadi", path: req.path });
+  app.use("/api", (req, res) => {
+    console.warn(`[API] 404 Not Found at /api: ${req.method} ${req.path}`);
+    res.status(404).json({ 
+      error: "API yo'li topilmadi", 
+      path: req.path, 
+      method: req.method,
+      fullPath: req.originalUrl 
+    });
   });
 
   // Vite middleware for development
