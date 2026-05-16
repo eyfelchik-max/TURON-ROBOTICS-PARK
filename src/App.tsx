@@ -138,7 +138,11 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Auth error:", err);
-      setAuthError(err.message);
+      if (err.code === 'auth/unauthorized-domain') {
+        setAuthError(`Ruxsat berilmagan domen. Firebase Console-ga o'ting va "Authorized Domains" ro'yxatiga ushbu domenni qo'shing: ${window.location.hostname}`);
+      } else {
+        setAuthError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -389,8 +393,23 @@ export default function App() {
               )}
 
               {authError && (
-                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl text-center">
-                  <p className="text-sm text-red-600 font-medium">{authError}</p>
+                <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl">
+                  <p className="text-sm text-red-600 font-medium text-center">{authError}</p>
+                  {authError.includes('Authorized Domains') && (
+                    <div className="mt-3 p-2 bg-white/50 rounded-lg border border-red-200 flex items-center justify-between gap-2">
+                      <code className="text-[10px] text-slate-600 font-mono break-all">{window.location.hostname}</code>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(window.location.hostname);
+                          alert('Domen nushalandi! Endi uni Firebase-ga qo\'shing.');
+                        }}
+                        className="p-1.5 bg-white rounded-md shadow-sm hover:bg-slate-50 border border-slate-200 transition-all active:scale-95"
+                        title="Nusxalash"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -534,11 +553,25 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => {
-                signInWithGoogle();
-                setView('form');
+              onClick={async () => {
+                setLoading(true);
+                setAuthError('');
+                try {
+                  await signInWithGoogle();
+                  setView('form');
+                } catch (err: any) {
+                  console.error("Google login error helper:", err);
+                  if (err.code === 'auth/unauthorized-domain') {
+                    setAuthError(`Ruxsat berilmagan domen. Firebase Console-ga o'ting va "Authorized Domains" ro'yxatiga ushbu domenni qo'shing: ${window.location.hostname}`);
+                  } else {
+                    setAuthError(err.message || "Google orqali kirishda xatolik");
+                  }
+                } finally {
+                  setLoading(false);
+                }
               }}
-              className="w-full py-4 rounded-2xl border border-slate-200 text-slate-900 font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all shadow-sm"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl border border-slate-200 text-slate-900 font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
