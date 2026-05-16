@@ -225,8 +225,9 @@ export default function App() {
   );
 
   const handleLoginPhoneSendOtp = async () => {
-    if (loginPhone.length < 12) {
-      setLoginOtpError("Raqamni to'g'ri kiriting (masalan: +998 90 123 45 67)");
+    console.log("Attempting to send Login OTP to:", loginPhone);
+    if (!loginPhone.startsWith('+998') || loginPhone.length < 13) {
+      setLoginOtpError("Telefon raqamini to'liq kiriting (masalan: +998 90 123 45 67)");
       return;
     }
     setLoginOtpLoading(true);
@@ -243,10 +244,10 @@ export default function App() {
         setLoginOtpTimer(120);
         setLoginOtpError('');
       } else {
-        setLoginOtpError(data.error || "Xatolik yuz berdi");
+        setLoginOtpError(data.error || "Kod yuborishda xatolik yuz berdi");
       }
     } catch (err: any) {
-      setLoginOtpError(err.message);
+      setLoginOtpError("Serverga ulanishda xatolik: " + err.message);
     } finally {
       setLoginOtpLoading(false);
     }
@@ -416,13 +417,24 @@ export default function App() {
                       type="tel"
                       disabled={loginOtpSent}
                       placeholder="+998 90 123 45 67"
-                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input outline-none focus:border-blue-500/50"
+                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input outline-none focus:border-blue-500/50 shadow-sm transition-all"
                       value={loginPhone}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleLoginPhoneSendOtp();
+                        }
+                      }}
                       onChange={(e) => {
                         let val = e.target.value;
-                        if (!val.startsWith('+998')) val = '+998';
-                        const numbers = val.slice(4).replace(/\D/g, '');
-                        setLoginPhone('+998' + numbers.slice(0, 9));
+                        if (!val.startsWith('+')) {
+                          if (val.startsWith('998')) val = '+' + val;
+                          else val = '+998' + val;
+                        }
+                        // Keep only + and digits
+                        val = val.replace(/[^\d+]/g, '');
+                        if (val.length > 13) val = val.slice(0, 13);
+                        setLoginPhone(val);
                       }}
                     />
                   </div>
@@ -430,13 +442,14 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleLoginPhoneSendOtp}
-                      disabled={loginOtpLoading || (loginOtpSent && loginOtpTimer > 0)}
+                      disabled={loginOtpLoading}
                       className="px-6 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm whitespace-nowrap min-w-[120px]"
                     >
                       {loginOtpLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : "Kod olish"}
                     </button>
                   )}
                 </div>
+                {!loginOtpSent && loginOtpError && <p className="text-xs text-red-500 ml-1 mt-1 font-medium">{loginOtpError}</p>}
               </div>
 
               <AnimatePresence>
@@ -452,8 +465,14 @@ export default function App() {
                           type="text"
                           maxLength={6}
                           placeholder="000 000"
-                          className="w-full px-4 py-4 rounded-2xl bg-white border border-slate-200 text-center tracking-[0.5em] font-black text-xl text-slate-900 focus:border-blue-500 outline-none transition-all"
+                          className="w-full px-4 py-4 rounded-2xl bg-white border border-slate-200 text-center tracking-[0.5em] font-black text-xl text-slate-900 focus:border-blue-500 outline-none transition-all shadow-inner"
                           value={loginOtpCode}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleLoginPhoneVerifyOtp();
+                            }
+                          }}
                           onChange={(e) => setLoginOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         />
                       </div>
@@ -619,7 +638,6 @@ export default function App() {
     if (!formData.firstName.trim()) newErrors.firstName = "Ismingizni kiriting";
     if (!formData.lastName.trim()) newErrors.lastName = "Familiyangizni kiriting";
     if (formData.phone.length < 13) newErrors.phone = "Telefon raqamini to'liq kiriting";
-    if (!isVerified) newErrors.phone = "Telefon raqamini tasdiqlang";
     if (!formData.region) newErrors.region = "Viloyatni tanlang";
     if (!formData.district.trim()) newErrors.district = "Tumanni tanlang";
     if (!formData.neighborhood.trim()) newErrors.neighborhood = "Mahallani tanlang";
@@ -803,17 +821,21 @@ export default function App() {
 
   const handlePhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
-    if (!value.startsWith('+998')) value = '+998';
-    const numbers = value.slice(4).replace(/\D/g, '');
-    setFormData({ ...formData, phone: '+998' + numbers.slice(0, 9) });
+    if (!value.startsWith('+')) {
+      if (value.startsWith('998')) value = '+' + value;
+      else value = '+998' + value;
+    }
+    value = value.replace(/[^\d+]/g, '');
+    if (value.length > 13) value = value.slice(0, 13);
+    setFormData({ ...formData, phone: value });
     // Reset verification if phone changes
     if (isVerified) setIsVerified(false);
     if (isOtpSent) setIsOtpSent(false);
   };
 
   const handleSendOtp = async () => {
-    if (formData.phone.length < 12) {
-      setErrors({ ...errors, phone: "Raqamni to'g'ri kiriting" });
+    if (formData.phone.length < 13) {
+      setErrors({ ...errors, phone: "Telefon raqamini to'liq kiritish shart (+998 90 123 45 67)" });
       return;
     }
     setOtpLoading(true);
@@ -831,10 +853,10 @@ export default function App() {
         setOtpError('');
         setErrors({ ...errors, phone: undefined });
       } else {
-        setOtpError(data.error || "Xatolik yuz berdi");
+        setOtpError(data.error || "Kod yuborishda xatolik yuz berdi. Telegram bot sozlamalarini tekshiring.");
       }
     } catch (err: any) {
-      setOtpError(err.message);
+      setOtpError("Serverga ulanishda xatolik: " + err.message);
     } finally {
       setOtpLoading(false);
     }
@@ -919,121 +941,18 @@ export default function App() {
           {/* Phone */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-slate-700 ml-1">Telefon raqami</label>
-            <div className="flex gap-2">
-              <div className="relative flex-grow">
-                <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isVerified ? 'text-emerald-500' : 'text-slate-400'}`} />
-                <input
-                  name="phone"
-                  type="tel"
-                  disabled={isVerified || isOtpSent}
-                  placeholder="+998 90 123 45 67"
-                  className={`w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input ${errors.phone ? 'border-red-500/50' : ''} ${isVerified ? 'bg-emerald-50/50 border-emerald-200' : ''}`}
-                  value={formData.phone}
-                  onChange={handlePhoneChange}
-                />
-                {isVerified && (
-                  <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                )}
-              </div>
-              {!isVerified && (
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={otpLoading || (isOtpSent && otpTimer > 0)}
-                  className="px-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm whitespace-nowrap min-w-[120px]"
-                >
-                  {otpLoading ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                  ) : isOtpSent && otpTimer > 0 ? (
-                    `${Math.floor(otpTimer / 60)}:${(otpTimer % 60).toString().padStart(2, '0')}`
-                  ) : isOtpSent ? (
-                    "Qayta yuborish"
-                  ) : (
-                    "Kod olish"
-                  )}
-                </button>
-              )}
+            <div className="relative">
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                name="phone"
+                type="tel"
+                placeholder="+998 90 123 45 67"
+                className={`w-full pl-12 pr-4 py-3.5 rounded-2xl glass-input ${errors.phone ? 'border-red-500/50' : ''}`}
+                value={formData.phone}
+                onChange={handlePhoneChange}
+              />
             </div>
             {errors.phone && <p className="text-xs text-red-600 ml-1">{errors.phone}</p>}
-
-            <AnimatePresence>
-              {isOtpSent && !isVerified && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4 mt-3 p-5 rounded-3xl bg-slate-50 border border-slate-100 overflow-hidden shadow-sm"
-                >
-                  {isOtpSent && !otpError && (
-                    <div className="flex items-center gap-3 text-emerald-600 bg-emerald-500/5 p-3 rounded-2xl border border-emerald-500/10 mb-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <p className="text-xs font-semibold">Kod yuborildi. Telegram guruhingizni tekshiring.</p>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <Info className="w-4 h-4 text-blue-500" />
-                    <p className="text-xs">Tasdiqlash kodi Telegram guruhingizga yuborildi.</p>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <div className="relative flex-grow">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        placeholder="000 000"
-                        className="w-full px-4 py-4 rounded-2xl bg-white border border-slate-200 text-center tracking-[0.5em] font-black text-xl text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none"
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleVerifyOtp}
-                      disabled={otpLoading || otpCode.length < 6}
-                      className="px-8 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all text-sm shadow-lg shadow-blue-600/20"
-                    >
-                      {otpLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : "Tasdiqlash"}
-                    </button>
-                  </div>
-                  
-                  {otpError && (
-                    <motion.p 
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="text-xs text-red-500 font-medium ml-1 flex items-center gap-2"
-                    >
-                      <X className="w-3 h-3" /> {otpError}
-                    </motion.p>
-                  )}
-                  
-                  <div className="flex justify-between items-center px-1">
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        setIsOtpSent(false);
-                        setOtpCode('');
-                      }}
-                      className="text-xs text-slate-500 hover:text-slate-900 font-medium transition-colors"
-                    >
-                      Raqamni o'zgartirish
-                    </button>
-                    {otpTimer === 0 ? (
-                      <button 
-                        type="button"
-                        onClick={handleSendOtp}
-                        className="text-xs text-blue-600 font-bold hover:underline"
-                      >
-                        Kodni qayta yuborish
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-400">
-                        {Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')}
-                      </span>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           {/* Age */}
